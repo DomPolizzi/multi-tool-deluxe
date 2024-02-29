@@ -1,46 +1,42 @@
 #!/bin/bash
-docker system prune
 
-# Custom VARS
-configs=$(docker config ls -q)
-secrets=$(docker secret ls -q)
+echo "Prune unused Docker objects"
+docker system prune -f
 
-# List all configs
-for config in $configs; do
-    # Initialize a counter for how many times a config is used
-    used=0
-    # List all services
-    services=$(docker service ls -q)
-    for service in $services; do
-        # Check if the current service uses the config
-        if docker service inspect $service --format '{{ .Spec.TaskTemplate.ContainerSpec.Configs }}' | grep -q $config; then
-            used=$((used + 1))
+# Function to check if a config is used by any service
+check_config_usage() {
+    for service in $(docker service ls -q); do
+        if docker service inspect "$service" --format '{{ .Spec.TaskTemplate.ContainerSpec.Configs }}' | grep -q "$1"; then
+            return 0
         fi
     done
-    # If the config is not used by any service, print its ID
-    if [ $used -eq 0 ]; then
-        echo "Unused config found: $config, removing config file"
-        docker config rm $config
+    return 1
+}
+
+# Function to check if a secret is used by any service
+check_secret_usage() {
+    for service in $(docker service ls -q); do
+        if docker service inspect "$service" --format '{{ range .Spec.TaskTemplate.ContainerSpec.Secrets }}{{ .SecretName }} {{end}}' | grep -wq "$1"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Clean up unused configs
+for config in $(docker config ls -q); do
+    if ! check_config_usage "$config"; then
+        config_name=$(docker config inspect "$config" --format '{{ .Spec.Name }}')
+        echo "Unused config found: $config_name, removing config file"
+        docker config rm "$config"
     fi
 done
 
-# List all Secrets
-for secret in $secrets; do
-    # Initialize a flag to indicate if the secret is used
-    is_used=false
-    # Check each service to see if the secret is used
-    services=$(docker service ls -q)
-    for service in $services; do
-        # If the secret is found in the service's spec, mark as used
-        if docker service inspect $service --format '{{ range .Spec.TaskTemplate.ContainerSpec.Secrets }}{{ .SecretName }} {{end}}' | grep -wq $secret; then
-            is_used=true
-            break
-        fi
-    done
-    # If the secret is unused, print its name
-    if [ "$is_used" = false ]; then
-        echo "Unused secret: $(docker secret inspect $secret --format '{{ .Spec.Name }}')"
-        echo " Removing now: "
-        docker secret rm $(docker secret inspect $secret --format '{{ .Spec.Name }}')
+# Clean up unused secrets
+for secret in $(docker secret ls -q); do
+    if ! check_secret_usage "$secret"; then
+        secret_name=$(docker secret inspect "$secret" --format '{{ .Spec.Name }}')
+        echo "Unused secret: $secret_name, removing now"
+        docker secret rm "$secret"
     fi
 done
