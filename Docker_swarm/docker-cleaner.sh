@@ -24,7 +24,6 @@ for config in $configs; do
     fi
 done
 
-
 # List all Secrets
 for secret in $secrets; do
     # Initialize a flag to indicate if the secret is used
