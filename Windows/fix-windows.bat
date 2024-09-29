@@ -1,7 +1,14 @@
 @echo off
 SETLOCAL ENABLEEXTENSIONS
 set LOGFILE=C:\logs\maintenance_log.txt
+set LOGDIR=%~dp0logs
 set DATESTAMP=%DATE%_%TIME%
+
+REM Check if the log directory exists, and if not, create it
+if not exist %LOGDIR% (
+    mkdir %LOGDIR%
+)
+
 echo Maintenance script started at %DATESTAMP% > %LOGFILE%
 
 REM Check for administrative privileges
@@ -13,6 +20,17 @@ if %errorLevel% == 0 (
 ) else (
     echo This script requires administrative privileges.
     goto :EOF
+)
+
+REM Prompt for deleting temp files
+echo Do you want to delete temporary files? (Y/N)
+set /p DELTEMP=Type Y or N and press Enter: 
+if /I "%DELTEMP%" EQU "Y" (
+    echo [%DATESTAMP%] Deleting temporary files... >> %LOGFILE%
+    del /q/f/s %TEMP%\* >> %LOGFILE% 2>&1
+    echo Temporary files deleted.
+) else (
+    echo Skipping deletion of temporary files.
 )
 
 REM Run System File Checker
@@ -37,7 +55,10 @@ echo [%DATESTAMP%] Resetting Winsocket >> %LOGFILE%
 netsh winsock reset >> %LOGFILE% 2>&1
 echo [%DATESTAMP%] IP Reset >> %LOGFILE%
 netsh int ip reset >> %LOGFILE% 2>&1
-
+ipconfig /flushdns >> %LOGFILE% 2>&1
+ipconfig /registerdns >> %LOGFILE% 2>&1
+ipconfig /release >> %LOGFILE% 2>&1
+ipconfig /renew >> %LOGFILE% 2>&1
 
 REM Shutdown command with delay
 echo [%DATESTAMP%] System will restart in 2 seconds to perform scheduled tasks. >> %LOGFILE%
